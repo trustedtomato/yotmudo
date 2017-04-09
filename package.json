@@ -1,0 +1,21 @@
+{
+  "name": "youtube-music-downloader",
+  "version": "0.0.1",
+  "description": "YouTube downloader",
+  "license": "MIT",
+  "engines": {
+    "node": ">=6.10.1"
+  },
+  "bin": {
+    "youtube-music-downloader": "youtube-music-downloader.js"
+  },
+  "dependencies": {
+    "colors": "^1.1.2",
+    "commander": "^2.9.0",
+    "fluent-ffmpeg": "^2.1.0",
+    "jsdom": "^9.12.0",
+    "node-fetch": "^1.6.3",
+    "prompt": "^1.0.0",
+    "ytdl-core": "^0.11.1"
+  }
+}
