@@ -154,9 +154,9 @@ dashdash@^1.12.0:
   dependencies:
     assert-plus "^1.0.0"
 
-deep-equal@~0.2.1:
-  version "0.2.2"
-  resolved "https://registry.yarnpkg.com/deep-equal/-/deep-equal-0.2.2.tgz#84b745896f34c684e98f2ce0e42abaf43bba017d"
+deep-equal@0.2.1, deep-equal@~0.2.1:
+  version "0.2.1"
+  resolved "https://registry.yarnpkg.com/deep-equal/-/deep-equal-0.2.1.tgz#fad7a793224cbf0c3c7786f92ef780e4fc8cc878"
 
 deep-is@~0.1.3:
   version "0.1.3"
@@ -216,6 +216,12 @@ eyes@0.1.x:
 fast-levenshtein@~2.0.4:
   version "2.0.6"
   resolved "https://registry.yarnpkg.com/fast-levenshtein/-/fast-levenshtein-2.0.6.tgz#3d8a5c66883a16a30ca8643e851f19baa7797917"
+
+filereader-stream@^0.2.0:
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/filereader-stream/-/filereader-stream-0.2.0.tgz#16374a202715b640b666ecffd07089938e9ff11f"
+  dependencies:
+    inherits "1.0.0"
 
 fluent-ffmpeg@^2.1.0:
   version "2.1.0"
@@ -307,13 +313,9 @@ i@0.3.x:
   version "0.3.5"
   resolved "https://registry.yarnpkg.com/i/-/i-0.3.5.tgz#1d2b854158ec8169113c6cb7f6b6801e99e211d5"
 
-iconv-lite@0.4.13:
+iconv-lite@0.4.13, iconv-lite@~0.4.13:
   version "0.4.13"
   resolved "https://registry.yarnpkg.com/iconv-lite/-/iconv-lite-0.4.13.tgz#1f88aba4ab0b1508e8312acc39345f36e992e2f2"
-
-iconv-lite@^0.4.15, iconv-lite@~0.4.13:
-  version "0.4.15"
-  resolved "https://registry.yarnpkg.com/iconv-lite/-/iconv-lite-0.4.15.tgz#fe265a218ac6a57cfe854927e9d04c19825eddeb"
 
 inflight@^1.0.4:
   version "1.0.6"
@@ -322,11 +324,15 @@ inflight@^1.0.4:
     once "^1.3.0"
     wrappy "1"
 
+inherits@1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/inherits/-/inherits-1.0.0.tgz#38e1975285bf1f7ba9c84da102bb12771322ac48"
+
 inherits@2:
   version "2.0.3"
   resolved "https://registry.yarnpkg.com/inherits/-/inherits-2.0.3.tgz#633c2c83e3da42a502f52466022480f4208261de"
 
-is-stream@^1.0.1:
+is-stream@^1.0.1, is-stream@^1.1.0:
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/is-stream/-/is-stream-1.1.0.tgz#12d4a3dd4e68e0b79ceb8dbc84173ae80d91ca44"
 
@@ -440,6 +446,16 @@ mkdirp@0.x.x:
   dependencies:
     minimist "0.0.8"
 
+musicmetadata@^2.0.5:
+  version "2.0.5"
+  resolved "https://registry.yarnpkg.com/musicmetadata/-/musicmetadata-2.0.5.tgz#7ae910d99fbaee05f2bd543aef10b6fbe1f37bd4"
+  dependencies:
+    deep-equal "0.2.1"
+    filereader-stream "^0.2.0"
+    is-stream "^1.1.0"
+    strtok2 "~1.0.0"
+    through "~2.3.4"
+
 mute-stream@~0.0.4:
   version "0.0.7"
   resolved "https://registry.yarnpkg.com/mute-stream/-/mute-stream-0.0.7.tgz#3075ce93bc21b8fab43e1bc4da7e8115ed1e7bab"
@@ -454,12 +470,6 @@ node-fetch@^1.6.3:
   dependencies:
     encoding "^0.1.11"
     is-stream "^1.0.1"
-
-node-id3@^0.0.9:
-  version "0.0.9"
-  resolved "https://registry.yarnpkg.com/node-id3/-/node-id3-0.0.9.tgz#bfdf2c84002c7dbfc2382ebffb286a60a49cbe9c"
-  dependencies:
-    iconv-lite "^0.4.15"
 
 "nwmatcher@>= 1.3.9 < 2.0.0":
   version "1.3.9"
@@ -521,12 +531,6 @@ prompt@^1.0.0:
     utile "0.3.x"
     winston "2.1.x"
 
-promptly@^2.2.0:
-  version "2.2.0"
-  resolved "https://registry.yarnpkg.com/promptly/-/promptly-2.2.0.tgz#2a13fa063688a2a5983b161fff0108a07d26fc74"
-  dependencies:
-    read "^1.0.4"
-
 punycode@^1.4.1:
   version "1.4.1"
   resolved "https://registry.yarnpkg.com/punycode/-/punycode-1.4.1.tgz#c0d5a63b2718800ad8e1eb0fa5269c84dd41845e"
@@ -535,7 +539,7 @@ qs@~6.4.0:
   version "6.4.0"
   resolved "https://registry.yarnpkg.com/qs/-/qs-6.4.0.tgz#13e26d28ad6b0ffaa91312cd3bf708ed351e7233"
 
-read@1.0.x, read@^1.0.4:
+read@1.0.x:
   version "1.0.7"
   resolved "https://registry.yarnpkg.com/read/-/read-1.0.7.tgz#b3da19bd052431a97671d44a42634adf710b40c4"
   dependencies:
@@ -621,9 +625,17 @@ stringstream@~0.0.4:
   version "0.0.5"
   resolved "https://registry.yarnpkg.com/stringstream/-/stringstream-0.0.5.tgz#4e484cd4de5a0bbbee18e46307710a8a81621878"
 
+strtok2@~1.0.0:
+  version "1.0.4"
+  resolved "https://registry.yarnpkg.com/strtok2/-/strtok2-1.0.4.tgz#df9ffb2e70a3336b4660e267ef0547e610275fc1"
+
 symbol-tree@^3.2.1:
   version "3.2.2"
   resolved "https://registry.yarnpkg.com/symbol-tree/-/symbol-tree-3.2.2.tgz#ae27db38f660a7ae2e1c3b7d1bc290819b8519e6"
+
+through@~2.3.4:
+  version "2.3.8"
+  resolved "https://registry.yarnpkg.com/through/-/through-2.3.8.tgz#0dd4c9ffaabc357960b1b724115d7e0e86a2e1f5"
 
 tough-cookie@^2.3.2, tough-cookie@~2.3.0:
   version "2.3.2"
@@ -650,6 +662,10 @@ type-check@~0.3.2:
   resolved "https://registry.yarnpkg.com/type-check/-/type-check-0.3.2.tgz#5884cab512cf1d355e3fb784f30804b2b520db72"
   dependencies:
     prelude-ls "~1.1.2"
+
+typescript@^2.2.2:
+  version "2.2.2"
+  resolved "https://registry.yarnpkg.com/typescript/-/typescript-2.2.2.tgz#606022508479b55ffa368b58fee963a03dfd7b0c"
 
 utile@0.3.x:
   version "0.3.0"
