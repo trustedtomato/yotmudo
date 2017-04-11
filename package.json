@@ -22,6 +22,9 @@
     "musicmetadata": "^2.0.5",
     "node-fetch": "^1.6.3",
     "prompt": "^1.0.0",
+    "querystring": "^0.2.0",
+    "tmp": "^0.0.31",
+    "tmp-promise": "^1.0.3",
     "typescript": "^2.2.2",
     "ytdl-core": "^0.11.1"
   },

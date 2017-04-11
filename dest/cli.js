@@ -9,14 +9,12 @@ program
     .version('0.0.1')
     .usage('<url>')
     .option('-f, --force', 'use the executed attributes, never prompt')
-    .option('-v, --video', 'make an mp4 file and include the video')
     .parse(process.argv);
 if (program.args.length === 0) {
     program.help();
 }
 else {
     youtube_music_downloader_1.download(program.args[0], {
-        video: program.video,
         validator: program.force
             ? null
             : ({ artist, title }, fullTitle) => new Promise(resolve => {
@@ -43,6 +41,7 @@ else {
                     }
                 });
             })
+    }).then(() => {
+        console.log('Completed!');
     });
-    const input = program.args[0];
 }
