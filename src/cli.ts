@@ -14,6 +14,7 @@ program
 if(program.args.length===0){
 	program.help();
 }else{
+	prompt.start();
 	downloadYoutubeMusic(program.args[0],{
 		validator: program.force
 		? null
@@ -21,7 +22,6 @@ if(program.args.length===0){
 			console.log(colors.gray('Raw title: ')+fullTitle);
 			prompt.message = '';
 			prompt.delimiter = ':';
-			prompt.start();
 			prompt.get({properties: {
 				artist: {
 					description: 'Artist',
@@ -32,7 +32,6 @@ if(program.args.length===0){
 					default: title
 				}
 			}},(err:any,result:any) => {
-				prompt.stop();
 				if(err){
 					resolve({artist,title});
 				}else{
@@ -41,6 +40,7 @@ if(program.args.length===0){
 			});
 		})
 	}).then(() => {
+		prompt.stop();
 		console.log('Completed!');
 	});
 }

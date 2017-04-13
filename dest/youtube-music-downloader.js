@@ -11,65 +11,61 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 const ffmpeg = require('fluent-ffmpeg');
 const ytdl = require('ytdl-core');
+const ytpl = require('ytpl');
 const jsdom = require('jsdom');
 const tmp = require('tmp-promise');
-const path = require("path");
-const fs = require("fs");
 const urlLib = require("url");
 const parseFullTitle = require("./parse-fulltitle");
 const VIDEO_URL = 'https://www.youtube.com/watch?v=';
-const inputToId = (input) => {
-    if (/^[a-zA-Z0-9\-_]+$/.test(input)) {
-        return input;
-    }
-    else {
-        const parsedUrl = urlLib.parse(input, true);
-        if (parsedUrl.pathname === '/watch') {
-            return parsedUrl.query.v;
-        }
-        else if (/^\/embed\//.test(parsedUrl.pathname)) {
-            return parsedUrl.pathname.replace(/^\/embed\//, '');
-        }
-    }
-};
 exports.download = (input, options = {}) => __awaiter(this, void 0, void 0, function* () {
-    const id = inputToId(input);
-    const streams = [ytdl(VIDEO_URL + id, { filter: 'audioonly' })];
-    streams.forEach(stream => {
-        stream.on('error', (err) => {
-            console.error(err);
+    const infos = yield (function () {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (/^[a-zA-Z0-9\-_]+$/.test(input)) {
+                input = VIDEO_URL + input;
+            }
+            console.log('Searching for "' + input + '"...');
+            const parsedUrl = urlLib.parse(input);
+            if (parsedUrl.pathname === '/watch') {
+                const streamInfo = yield ytdl.getInfo(input);
+                console.log('Found track!');
+                return [streamInfo];
+            }
+            const playlist = yield ytpl(input);
+            console.log('Found playlist!');
+            return playlist.items.map((item) => {
+                const streamInfo = ytdl.getInfo(item.url_simple);
+                return streamInfo;
+            });
+        });
+    }());
+    /*
+    streamsWithInfo.forEach(([stream]) => {
+        stream.on('error',(err:Error) => {
+            console.error(err.message);
         });
     });
-    const tmpDir = yield tmp.dir();
-    const filePathsWithFullTitles = new Map(yield Promise.all(streams.map((stream) => __awaiter(this, void 0, void 0, function* () {
-        const fullTitle = yield (new Promise(resolve => {
-            stream.on('info', (info) => {
-                resolve(info.title);
-            });
-        }));
-        const p = new Promise(resolve => {
-            const filePath = path.join(tmpDir.path, fullTitle + '.mp4');
-            stream.pipe(fs.createWriteStream(filePath));
-            stream.on('end', () => {
-                resolve([filePath, fullTitle]);
-            });
-        });
-        return p;
-    }))));
-    const filePathsWithMetadatas = new Map(yield Promise.all(Array.from(filePathsWithFullTitles).map(([path, fullTitle]) => new Promise(resolve => {
-        const parsedFullTitle = parseFullTitle(fullTitle);
+    */
+    const metadatas = new Map();
+    yield infos.reduce((promise, info) => {
+        const parsedFullTitle = parseFullTitle(info.title);
         if (typeof options.validator === 'function') {
-            Promise.resolve(options.validator(parsedFullTitle, fullTitle)).then(metadata => {
-                resolve([path, metadata]);
+            return promise.then(() => {
+                return Promise.resolve(options.validator(parsedFullTitle, info.title)).then((metadata) => {
+                    metadatas.set(info, metadata);
+                }).catch(err => {
+                    metadatas.set(info, parsedFullTitle);
+                });
             });
         }
-    }))));
-    return Promise.all(Array.from(filePathsWithMetadatas).map(([filePath, metadata]) => new Promise(resolve => {
-        const proc = new ffmpeg(filePath);
+    }, Promise.resolve());
+    return Promise.all(Array.from(metadatas).map(([info, metadata]) => new Promise(resolve => {
+        console.log('Started ' + metadata.title + '...');
+        const proc = new ffmpeg(ytdl.downloadFromInfo(info, { filter: 'audioonly' }));
         proc.addOutputOption('-metadata', 'artist=' + metadata.artist);
         proc.addOutputOption('-metadata', 'title=' + metadata.title);
         proc.saveToFile(metadata.artist + ' - ' + metadata.title + '.mp3');
         proc.on('end', () => {
+            console.log('Finished ' + metadata.title);
             resolve();
         });
     })));

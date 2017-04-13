@@ -14,6 +14,7 @@ if (program.args.length === 0) {
     program.help();
 }
 else {
+    prompt.start();
     youtube_music_downloader_1.download(program.args[0], {
         validator: program.force
             ? null
@@ -21,7 +22,6 @@ else {
                 console.log(colors.gray('Raw title: ') + fullTitle);
                 prompt.message = '';
                 prompt.delimiter = ':';
-                prompt.start();
                 prompt.get({ properties: {
                         artist: {
                             description: 'Artist',
@@ -32,7 +32,6 @@ else {
                             default: title
                         }
                     } }, (err, result) => {
-                    prompt.stop();
                     if (err) {
                         resolve({ artist, title });
                     }
@@ -42,6 +41,7 @@ else {
                 });
             })
     }).then(() => {
+        prompt.stop();
         console.log('Completed!');
     });
 }

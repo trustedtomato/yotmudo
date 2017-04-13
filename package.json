@@ -19,6 +19,7 @@
     "commander": "^2.9.0",
     "fluent-ffmpeg": "^2.1.0",
     "jsdom": "^9.12.0",
+    "mocha": "^3.2.0",
     "musicmetadata": "^2.0.5",
     "node-fetch": "^1.6.3",
     "prompt": "^1.0.0",
@@ -26,7 +27,8 @@
     "tmp": "^0.0.31",
     "tmp-promise": "^1.0.3",
     "typescript": "^2.2.2",
-    "ytdl-core": "^0.11.1"
+    "ytdl-core": "^0.11.1",
+    "ytpl": "^0.1.1"
   },
   "repository": "git@github.com:trustedtomato/node-youtube-music-downloader.git",
   "author": "Halasi Tamás <trusted.tomato@gmail.com>"

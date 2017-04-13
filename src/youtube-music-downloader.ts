@@ -2,6 +2,7 @@
 
 const ffmpeg:any = require('fluent-ffmpeg');
 const ytdl:any = require('ytdl-core');
+const ytpl:any = require('ytpl');
 const jsdom:any = require('jsdom');
 const tmp:any = require('tmp-promise');
 import path = require('path');
@@ -20,65 +21,65 @@ export interface BasicMetadata{
 	title:string
 }
 export interface Metadata extends BasicMetadata{}
+interface Info{
+	title:string,
+	video_url:string
+}
 
 
-
-const inputToId = (input:string):string => {
-	if(/^[a-zA-Z0-9\-_]+$/.test(input)){
-		return input;
-	}else{
-		const parsedUrl = urlLib.parse(input,true);
-		if(parsedUrl.pathname==='/watch'){
-			return parsedUrl.query.v;
-		}else if(/^\/embed\//.test(parsedUrl.pathname)){
-			return parsedUrl.pathname.replace(/^\/embed\//,'');
-		}
-	}
-};
 
 export const download = async (input:string,options:{validator?:(parsedFullTitle:BasicMetadata,fullTitle:string)=>Metadata | Promise<Metadata>} = {}) => {
-	const id = inputToId(input);
-	
-	const streams = [ytdl(VIDEO_URL+id,{filter: 'audioonly'})];
+	const infos:Info[] = await (async function(){
+		if(/^[a-zA-Z0-9\-_]+$/.test(input)){
+			input = VIDEO_URL+input;
+		}
+		console.log('Searching for "'+input+'"...');
+		const parsedUrl = urlLib.parse(input);
+		if(parsedUrl.pathname==='/watch'){
+			const streamInfo = await ytdl.getInfo(input);
+			console.log('Found track!');
+			return [streamInfo];
+		}
+		const playlist = await ytpl(input);
+		console.log('Found playlist!');
+		return playlist.items.map((item:any) => {
+			const streamInfo = ytdl.getInfo(item.url_simple);
+			return streamInfo;
+		});
+	}());
 
-	streams.forEach(stream => {
-		stream.on('error',(err:any) => {
-			console.error(err);
+	/*
+	streamsWithInfo.forEach(([stream]) => {
+		stream.on('error',(err:Error) => {
+			console.error(err.message);
 		});
 	});
-
-	const tmpDir = await tmp.dir();
-	const filePathsWithFullTitles = new Map(await Promise.all(streams.map(async (stream:any):Promise<[string,string]> => {
-		const fullTitle = await (new Promise(resolve => {
-			stream.on('info',(info:any) => {
-				resolve(info.title);
-			});
-		}));
-		const p:Promise<[string,string]> = new Promise(resolve => {
-			const filePath = path.join(tmpDir.path,fullTitle+'.mp4');
-			stream.pipe(fs.createWriteStream(filePath));
-			stream.on('end',() => {
-				resolve([filePath,fullTitle]);
-			});
-		});
-		return p;
-	})));
-
-	const filePathsWithMetadatas = new Map(await Promise.all(Array.from(filePathsWithFullTitles).map(([path,fullTitle]):Promise<[string,Metadata]> => new Promise(resolve => {
-		const parsedFullTitle = parseFullTitle(fullTitle);
+	*/
+	
+	const metadatas:Map<Info,Metadata> = new Map();
+	await infos.reduce((promise:Promise<any>,info) => {
+		const parsedFullTitle = parseFullTitle(info.title);
 		if(typeof options.validator === 'function'){
-			Promise.resolve(options.validator(parsedFullTitle,fullTitle)).then(metadata => {
-				resolve([path,metadata]);
+			return promise.then(() => {
+				return Promise.resolve(options.validator(parsedFullTitle,info.title)).then((metadata:Metadata) => {
+					metadatas.set(info,metadata);
+				}).catch(err => {
+					metadatas.set(info,parsedFullTitle);
+				});
 			});
 		}
-	}))));
-	
-	return Promise.all(Array.from(filePathsWithMetadatas).map(([filePath,metadata]) => new Promise(resolve => {
-		const proc = new ffmpeg(filePath);
+	},Promise.resolve());
+
+
+
+	return Promise.all(Array.from(metadatas).map(([info,metadata]) => new Promise(resolve => {
+		console.log('Started '+metadata.title+'...');
+		const proc = new ffmpeg(ytdl.downloadFromInfo(info,{filter: 'audioonly'}));
 		proc.addOutputOption('-metadata','artist='+metadata.artist);
 		proc.addOutputOption('-metadata','title='+metadata.title);
 		proc.saveToFile(metadata.artist + ' - ' + metadata.title +'.mp3');
 		proc.on('end',() => {
+			console.log('Finished '+metadata.title);
 			resolve();
 		});
 	})));
