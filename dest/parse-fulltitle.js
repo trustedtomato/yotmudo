@@ -1,3 +1,4 @@
+"use strict";
 /*
 fullTitle
     The whole title of the song; this is the raw thingy
@@ -12,8 +13,7 @@ otherProperties
     The other properties of the song
     Example: Alex remix
 */
-"use strict";
-const separators = '\u002D\u007E\u058A\u1806\u2010\u2011\u2012\u2013\u2014\u2015\u2053\u207B\u208B\u2212\u301C\u3030';
+const separators = '\u002D\u007E\u058A\u1806\u2010\u2011\u2012\u2013\u2014\u2015\u2053\u207B\u208B\u2212\u301C\u3030\u003A';
 const titleBrackets = [
     ['(', ')'],
     ['[', ']'],
@@ -25,19 +25,20 @@ const titleBracketHandlers = [
         handler: (title, matches) => title + ' ft. ' + matches.join(', ')
     }, {
         regex: /(.*)\s+remix/i,
-        handler: (title, matches) => title + '(' + matches.join(' & ') + ' remix)'
+        handler: (title, matches) => title + ' (' + matches.join(' & ') + ' remix)'
     }, {
         regex: /(.*)\s+version/i,
-        handler: (title, matches) => title + matches.map(match => '(' + match + ' version)').join(' ')
+        handler: (title, matches) => title + matches.map(match => ' (' + match + ' version)').join(' ')
     }, {
         regex: /(.*\scover\s.*)/i,
-        handler: (title, matches) => title + matches.map(match => '(' + match + ' cover)').join(' ')
+        handler: (title, matches) => title + matches.map(match => ' (' + match + ' cover)').join(' ')
     }
 ];
 const parseFullTitle = (fullTitle) => {
     if (typeof fullTitle !== 'string') {
         throw new Error('fullTitle must be string!');
     }
+    /* split title by main separators (like -)*/
     const splittedFullTitle = fullTitle.split(eval('/[' + separators + ']+/ig')).map(part => part.trim()).filter(part => part !== '');
     if (splittedFullTitle.length === 0) {
         return {
