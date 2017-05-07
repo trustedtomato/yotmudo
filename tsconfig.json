@@ -9,8 +9,7 @@
 		"baseUrl": "./",
 		"lib": [
 			"es2017"
-		],
-		"declaration": true
+		]
 	},
 	"exclude": [
 		"node_modules",

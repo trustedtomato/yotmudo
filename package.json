@@ -5,13 +5,14 @@
   "license": "MIT",
   "scripts": {
     "watch": "tsc -w",
-    "build": "tsc"
+    "build": "tsc",
+    "postversion": "git push && git push --tags && npm publish"
   },
   "engines": {
     "node": ">=6.10.1"
   },
   "bin": {
-    "youtube-music-downloader": "dest/cli.js"
+    "youtube-music-downloader": "bin.js"
   },
   "dependencies": {
     "@types/chalk": "^0.4.31",

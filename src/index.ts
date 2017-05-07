@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /*--- import packages what are needed for the basic input checking ---*/
 const info:any = require('../package.json');
 import * as util from 'util';
