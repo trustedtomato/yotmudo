@@ -6,12 +6,15 @@
 		"target": "es2015",
 		"alwaysStrict": true,
 		"noImplicitAny": true,
+		"baseUrl": "./",
 		"lib": [
 			"es2017"
 		],
 		"declaration": true
 	},
-	"include": [
-		"src/**/*"
+	"exclude": [
+		"node_modules",
+		"dest",
+		"typings"
 	]
 }
