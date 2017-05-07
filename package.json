@@ -1,5 +1,5 @@
 {
-  "name": "youtube-music-downloader",
+  "name": "ytmd",
   "version": "0.0.1",
   "description": "YouTube downloader",
   "license": "MIT",
@@ -12,7 +12,7 @@
     "node": ">=6.10.1"
   },
   "bin": {
-    "youtube-music-downloader": "bin.js"
+    "ytmd": "bin.js"
   },
   "dependencies": {
     "@types/chalk": "^0.4.31",

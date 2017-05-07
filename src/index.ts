@@ -22,9 +22,18 @@ const playlistProgram = createProgram('<url>')
 const mainProgram = createProgram()
 	.command('track',trackProgram)
 	.command('playlist',playlistProgram)
+	.option('-V, --version','output the version')
 	// TODO: .option('-h, --help','output help',{inheritance: true})
 
 const input = mainProgram.parse(process.argv.slice(2));
+
+
+
+/*--- output version ---*/
+if(input.program===mainProgram && input.options.version===true){
+	console.log('ytmd '+info.version);
+	throw process.exit();
+}
 
 
 
@@ -33,7 +42,7 @@ if(input.errors.length > 0){
 	input.errors.forEach(error => {
 		console.error(chalk.red('err'),util.inspect(error,{depth: null}));
 	});
-	process.exit();
+	throw process.exit(1);
 }
 
 
@@ -41,7 +50,7 @@ if(input.errors.length > 0){
 /*--- error if it haven't invoked a right program ---*/
 if(input.program!==trackProgram && input.program!==playlistProgram){
 	console.error(chalk.red('err'),'invalid command!');
-	process.exit();
+	throw process.exit(1);
 }
 
 
@@ -107,13 +116,13 @@ export interface Track extends BasicTrackWithInfo{
 
 
 export let defaultNumberOfParallelRequests = 5;
-const getInfoByURL = async (basicTrack:BasicTrack,retries:number = 0,retryDelay:number = 1000):Promise<BasicTrackWithInfo> => {
+const getInfoByURL = async (basicTrack:BasicTrack,retries:number = 0,retryDelay:number = 1000):Promise<BasicTrackWithInfo|Error> => {
 	return await ytdl.getInfo(basicTrack.url).then(info =>
 		Object.assign({},basicTrack,{info: info})
 	).catch(
-		async (err:any) => {
+		async (err:Error) => {
 			if(retries<=0){
-				throw err;
+				return err;
 			}
 			return delay(retryDelay).then(async () => await getInfoByURL(basicTrack,retries-1,retryDelay))
 		}
@@ -128,6 +137,7 @@ const saveTrack = (track:Track):Promise<Track> => new Promise(resolve => {
 	const filename:string = sanitizeFilename(track.metadata.artist + ' - ' + track.metadata.title +'.mp3');
 	const proc = ffmpeg(ytdl.downloadFromInfo(track.info,{format: highestAudioBitrateFormat}));
 	proc.saveToFile(filename);
+	/* TODO: handler proc error */
 	proc.on('end',() => {
 		id3.write({
 			artist: track.metadata.artist,
@@ -146,9 +156,9 @@ const getVideoURLs = async (input:string,type:string = 'track'):Promise<BasicTra
 		return [{url: input}];
 	}
 };
-const getInfos = (datas:BasicTrack[],numberOfParallelRequests:number = defaultNumberOfParallelRequests):Promise<BasicTrackWithInfo>[] => {
+const getInfos = (datas:BasicTrack[],numberOfParallelRequests:number = defaultNumberOfParallelRequests):Promise<BasicTrackWithInfo|Error>[] => {
 	return processInChunks(chunkArray(datas,numberOfParallelRequests),async data =>
-		Object.assign({},data,await getInfoByURL(data)/* TODO: .catch(err => err)*/)
+		await getInfoByURL(data)
 	);
 };
 const getMetadatas = (datas:BasicTrackWithInfo[],numberOfParallelRequests:number = defaultNumberOfParallelRequests):Promise<Track>[] => {
@@ -194,27 +204,41 @@ const saveTracks = (datas:Track[],numberOfParallelRequests:number = defaultNumbe
 
 (async function(){
 	const inputType = input.program===playlistProgram ? 'playlist' : 'track';
-	const basicTracks = await getVideoURLs(input.arguments.url,inputType);
+	const basicTracks = await getVideoURLs(input.arguments.url,inputType).catch((err) => {
+		console.error(chalk.red('err'),'did not found corresponding urls! check the input & internet connection!');
+		throw process.exit(1);
+	});
+
 	console.log('Found '+inputType+'!');
 	
 	const basicTrackWithInfoPromises = getInfos(basicTracks);
 	basicTrackWithInfoPromises.forEach(async basicTrackWithInfoPromise => {
 		const basicTrackWithInfo = await basicTrackWithInfoPromise;
-		console.log(chalk.green('I ')+basicTrackWithInfo.info.title);
+		if(!(basicTrackWithInfo instanceof Error)){
+			console.log(chalk.green('I'),basicTrackWithInfo.info.title);
+		}else{
+			console.error(chalk.red('I'),basicTrackWithInfo.message);
+		}
 	});
-	const infos = await Promise.all(basicTrackWithInfoPromises);
+	const infos:BasicTrackWithInfo[] = <any>(await Promise.all(basicTrackWithInfoPromises)).filter(info => !(info instanceof Error));
 
 	const trackPromises = getMetadatas(infos);
 	trackPromises.forEach(async trackPromise => {
-		const track = await trackPromise;
-		console.log(chalk.green('M ')+track.info.title);
+		trackPromise.then(track => {
+			console.log(chalk.green('M'),track.info.title);
+		}).catch(err => {
+			console.error(chalk.red('M'),err.message);
+		});
 	});
 	const tracks = await Promise.all(trackPromises);
 	
 	const trackDownloadPromises = saveTracks(tracks);
 	trackDownloadPromises.forEach(async trackDownloadPromise => {
-		const trackDownload = await trackDownloadPromise;
-		console.log(chalk.green('D ')+trackDownload.info.title);
+		trackDownloadPromise.then(trackDownload => {
+			console.log(chalk.green('D'),trackDownload.info.title);
+		}).catch(err => {
+			console.error(chalk.red('D'),err.message);
+		});
 	});
 	await Promise.all(trackDownloadPromises);
 
