@@ -1,15 +1,15 @@
 /*--- import packages what are needed for the basic input checking ---*/
 const info:any = require('../package.json');
-import * as util from 'util';
+import {inspect} from 'util';
 import {createOption,createProgram,ParsingErrors,ParsingWarnings} from 'commandy';
 import * as chalk from 'chalk';
 
 
 
 /*--- define program behavior ---*/
-const coverOption = createOption('-c, --cover','try to find a cover of the song');
+const coverOption = createOption('--cover','try to find a cover of the song');
 
-const trackProgram = createProgram('<url>')
+const trackProgram = createProgram('<url> [track-title]')
 	.description('download single track')
 	.option(coverOption)
 
@@ -17,6 +17,7 @@ const playlistProgram = createProgram('<url>')
 	.description('download whole playlist')
 	.option('-a, --artist <artist-name>','default value for artist')
 	.option('-A, --album <album-name>','treats playlist as album')
+	.option('-s, --sync','synchronizes playlist; if the file to download is already there, skip it')
 	.option(coverOption)
 
 const mainProgram = createProgram()
@@ -40,7 +41,7 @@ if(input.program===mainProgram && input.options.version===true){
 /*--- error on syntactically wrong input ---*/
 if(input.errors.length > 0){
 	input.errors.forEach(error => {
-		console.error(chalk.red('err'),util.inspect(error,{depth: null}));
+		console.error(chalk.red('err'),inspect(error,{depth: null}));
 	});
 	throw process.exit(1);
 }
@@ -58,20 +59,18 @@ if(input.program!==trackProgram && input.program!==playlistProgram){
 /*--- else it's good; do the task ---*/
 import ffmpeg = require('fluent-ffmpeg');
 import ytdl = require('ytdl-core');
-const ytpl:any = require('ytpl');
+import ytpl = require('ytpl');
 import sanitizeFilename = require('sanitize-filename');
 import tmp = require('tmp');
 import request = require('request');
 const mimeTypes:any = require('mime-types');
 import guessMetadata = require('guess-metadata');
-const id3:any = require('node-id3');
-import {createWriteStream} from 'fs';
+import {createWriteStream,open,close} from 'fs';
 import {PassThrough} from 'stream';
 import {EventEmitter} from 'events';
 import getImages = require('./get-images');
 
 const VIDEO_URL = 'https://www.youtube.com/watch?v=';
-
 
 
 const chunkArray = <T>(arr:T[],chunkLength:number):T[][] => {
@@ -85,162 +84,281 @@ const chunkArray = <T>(arr:T[],chunkLength:number):T[][] => {
 const delay = (delay:number) => new Promise(resolve => 
 	setTimeout(resolve,delay)
 );
-const processInChunks = <T,U>(chunks:T[][],processor:(x:T)=>Promise<U>,after:Promise<any> = Promise.resolve()):Promise<U>[] => {
+const objEntries = (obj:{[key:string]:any}) =>
+	Object.keys(obj).map((key):[string,any] =>
+		[key,obj[key]]
+	);
+/** Clones object but removes values which are falsy or empty arrays. */
+const compactObject = (obj:{[key:string]:any}) => {
+	const compactObj:any = {};
+	objEntries(obj).forEach(([key,value]) => {
+		if(!value) return;
+		if(Array.isArray(value) && value.length===0) return;
+		compactObj[key] = value;
+	});
+	return compactObj;
+};
+const processChunks = <T,U>(chunks:T[][],processor:(x:T)=>Promise<U>,after:Promise<any> = Promise.resolve()):Promise<U>[] => {
 	if(typeof chunks==='undefined' || typeof chunks[0]==='undefined'){
 		return [];
 	}
 	const firstChunkXPromises = chunks[0].map(x => after.then(() => processor(x)));
-	const otherChunkXPromises = processInChunks(chunks.slice(1),processor,Promise.all(firstChunkXPromises));
+	const otherChunkXPromises = processChunks(chunks.slice(1),processor,Promise.all(
+		firstChunkXPromises.map(xProm => xProm.catch(x => x))
+	));
 	return firstChunkXPromises.concat(otherChunkXPromises);
 };
+const rejectFilteredPromiseAll = async <U>(promises:Promise<U>[]):Promise<U[]> =>
+	(await Promise.all(promises.map((promise):Promise<{value: U}|undefined> =>
+		promise.then(value => ({value})).catch(value => undefined)
+	))).filter(value => value !== undefined).map(value => value.value);
 
 
 
-export interface Metadata{
-	artist:string
-	title:string
-	image?:string
-}
-export type videoInfo = ytdl.videoInfo;
-
-export interface BasicTrack{
-	url:string
-}
-export interface BasicTrackWithInfo extends BasicTrack{
-	info:videoInfo
-}
-export interface Track extends BasicTrackWithInfo{
-	metadata:Metadata
-}
-
-
-
-export let defaultNumberOfParallelRequests = 5;
-const getInfoByURL = async (basicTrack:BasicTrack,retries:number = 0,retryDelay:number = 1000):Promise<BasicTrackWithInfo|Error> => {
-	return await ytdl.getInfo(basicTrack.url).then(info =>
-		Object.assign({},basicTrack,{info: info})
-	).catch(
+const correctYoutubeUrl = (url:string) =>
+	(/^[a-zA-Z0-9\-_]+$/.test(url))
+		? VIDEO_URL+url
+		: url;
+const getYtdlInfoByURL = async (url:string,retries:number = 0,retryDelay:number = 1000):Promise<ytdl.videoInfo> => {
+	return await ytdl.getInfo(url).catch(
 		async (err:Error) => {
 			if(retries<=0){
-				return err;
+				throw new Error('Cannot get info!');
 			}
-			return delay(retryDelay).then(async () => await getInfoByURL(basicTrack,retries-1,retryDelay))
+			return delay(retryDelay).then(async () => await getYtdlInfoByURL(url,retries-1,retryDelay))
 		}
 	)
 };
-const saveTrack = (track:Track):Promise<Track> => new Promise(resolve => {
-	const highestAudioBitrateFormat = track.info.formats.sort((formatA:ytdl.videoFormat,formatB:ytdl.videoFormat) => {
+const getYtdlProcess = (info:ytdl.videoInfo) => {
+	const highestAudioBitrateFormat = info.formats.sort((formatA:ytdl.videoFormat,formatB:ytdl.videoFormat) => {
 		const bitrateA = formatA.audioBitrate || 0;
 		const bitrateB = formatB.audioBitrate || 0;
 		return bitrateB - bitrateA;
 	})[0];
-	const filename:string = sanitizeFilename(track.metadata.artist + ' - ' + track.metadata.title +'.mp3');
-	const proc = ffmpeg(ytdl.downloadFromInfo(track.info,{format: highestAudioBitrateFormat}));
-	proc.saveToFile(filename);
-	/* TODO: handler proc error */
-	proc.on('end',() => {
-		id3.write({
-			artist: track.metadata.artist,
-			title: track.metadata.title,
-			image: track.metadata.image
-		},filename);
-		resolve(track);
-	});
-});
-const getVideoURLs = async (input:string,type:string = 'track'):Promise<BasicTrack[]> => {
+	return ytdl.downloadFromInfo(info,{format: highestAudioBitrateFormat});
+};
+/*
+const getVideoURLs = async (input:string,type:string = 'track'):Promise<string[]> => {
 	if(type==='playlist'){
 		const playlist = await ytpl(input,{});
 		return playlist.items.map((item:any):{url:string} => ({url: item.url_simple}));
 	}else if(type==='track'){
 		if(/^[a-zA-Z0-9\-_]+$/.test(input)) input = VIDEO_URL+input;
-		return [{url: input}];
+		return [input];
 	}
 };
-const getInfos = (datas:BasicTrack[],numberOfParallelRequests:number = defaultNumberOfParallelRequests):Promise<BasicTrackWithInfo|Error>[] => {
-	return processInChunks(chunkArray(datas,numberOfParallelRequests),async data =>
-		await getInfoByURL(data)
-	);
-};
-const getMetadatas = (datas:BasicTrackWithInfo[],numberOfParallelRequests:number = defaultNumberOfParallelRequests):Promise<Track>[] => {
-	return processInChunks(chunkArray(datas,numberOfParallelRequests),async data => {
-		const basicMetadata = guessMetadata(data.info.title);
-		
-		const imageExtension = await (async function(){
-			if(input.options.cover){
-				const q = basicMetadata.artist + ' ' + basicMetadata.title + ' album cover';
-				/* TODO: handle error */
-				const covers = await getImages(q);
-				const stream = request(covers[0]);
-				const readStream = stream.pipe(new PassThrough());
-				const contentType = await (new Promise(resolve => {
-					stream.on('response',(response:any) => {
-						resolve(response.headers['content-type']);
-					});
-				}));
-				const extension = mimeTypes.extension(contentType);
-				const tempFilePath = await (new Promise<string>((resolve,reject) => {
-					tmp.file({postfix: '.'+extension, discardDescriptor: true},(err:Error,path:string,fd:undefined,cleanup:()=>void) => {
-						const writeStream = readStream.pipe(createWriteStream(path));
-						writeStream.on('finish',() => {
-							resolve(path);
-						});
-					});
-				}));
-				return {image: tempFilePath};
-			}else{
-				return {};
+*/
+
+/*
+const imageExtension:{image?:string} = await (async function(){
+	if(cover){
+		const q = basicMetadata.artist + ' ' + basicMetadata.title + ' album cover';
+		const covers = await getImages(q);
+		const stream = request(covers[0]);
+		let completed = false;
+		stream.on('error',() => {
+			if(!completed){
+				throw new Error('Cannot get images!');
 			}
-		})();
+		});
+		const readStream = stream.pipe(new PassThrough());
+		const contentType = await (new Promise(resolve => {
+			stream.on('response',(response:any) => {
+				resolve(response.headers['content-type']);
+			});
+		}));
+		const extension = mimeTypes.extension(contentType);
+		const tempFilePath = await (new Promise<string>((resolve,reject) => {
+			tmp.file({postfix: '.'+extension, discardDescriptor: true},(err:Error,path:string,fd:undefined,cleanup:()=>void) => {
+				const writeStream = readStream.pipe(createWriteStream(path));
+				writeStream.on('finish',() => {
+					resolve(path);
+				});
+			});
+		}));
+		return {image: tempFilePath};
+	}else{
+		return {};
+	}
+})().catch(err => ({}));
+*/
 
-		const metadata = Object.assign(basicMetadata,imageExtension);
-		return Object.assign({},data,{metadata: metadata});
-	});
-};
-const saveTracks = (datas:Track[],numberOfParallelRequests:number = defaultNumberOfParallelRequests):Promise<Track>[] => {
-	return processInChunks(chunkArray(datas,numberOfParallelRequests),
-		data => saveTrack(data)
-	);
-};
-
-(async function(){
-	const inputType = input.program===playlistProgram ? 'playlist' : 'track';
-	const basicTracks = await getVideoURLs(input.arguments.url,inputType).catch((err) => {
-		console.error(chalk.red('err'),'did not found corresponding urls! check the input & internet connection!');
-		throw process.exit(1);
-	});
-
-	console.log('Found '+inputType+'!');
-	
-	const basicTrackWithInfoPromises = getInfos(basicTracks);
-	basicTrackWithInfoPromises.forEach(async basicTrackWithInfoPromise => {
-		const basicTrackWithInfo = await basicTrackWithInfoPromise;
-		if(!(basicTrackWithInfo instanceof Error)){
-			console.log(chalk.green('I'),basicTrackWithInfo.info.title);
+const writableFd = (path:string):Promise<number|undefined> => new Promise(resolve => {
+	open(path,'wx',(err,fd) => {
+		if(err){
+			resolve(undefined);
 		}else{
-			console.error(chalk.red('I'),basicTrackWithInfo.message);
+			resolve(fd);
 		}
 	});
-	const infos:BasicTrackWithInfo[] = <any>(await Promise.all(basicTrackWithInfoPromises)).filter(info => !(info instanceof Error));
+});
+const openWritableFileWithNumberedFilename = async (path:string) => {
+	const [pathWithoutExtension,extension] = path.split(/\.(?=[^.]+$)/);
+	let i = 2;
+	for(;; i++){
+		const numberedPath = pathWithoutExtension+' #'+i+'.'+extension;
+		const fd = await writableFd(numberedPath);
+		if(typeof fd === 'number'){
+			return{
+				path: numberedPath,
+				fd: fd
+			};
+		}
+	}
+};
+const openWritableFile = async (path:string) => {
+	const fd = await writableFd(path);
+	if(typeof fd === 'number'){
+		return{
+			path: path,
+			fd: fd
+		};
+	}else{
+		return await openWritableFileWithNumberedFilename(path);
+	}
+};
 
-	const trackPromises = getMetadatas(infos);
-	trackPromises.forEach(async trackPromise => {
-		trackPromise.then(track => {
-			console.log(chalk.green('M'),track.info.title);
-		}).catch(err => {
-			console.error(chalk.red('M'),err.message);
-		});
-	});
-	const tracks = await Promise.all(trackPromises);
+// TODO: get youtube title earlier ✓
+// TODO: add track-title option
+// TODO: add sync option ✓
+// TODO: add album option
+// TODO: add author option
+
+/*
+Object.keys(chalk.styles).forEach(key => {
+	console.log(key + ': ' + (<any>chalk)[key]('Test text'));
+});
+process.exit(0);
+*/
+
+(async function(){
+	const numberOfParallelRequests = 5;
+
+
+	if(input.program===trackProgram){
+		const url = correctYoutubeUrl(input.arguments.url);
+		const info = await (getYtdlInfoByURL(url).catch(err => {
+			console.error(chalk.red('err'),'did not found corresponding video! check the input & internet connection!');
+			throw process.exit(1);
+		}));
+		const uploader = info.author.name;
+		const metadata = Object.assign(
+			{
+				artist: uploader,
+				title: 'ID'
+			},
+			guessMetadata(info.title)
+		);
+
+		console.log(`${chalk.blue(info.title)} ${chalk.grey(`(${uploader})`)}`);
+		const generalTitle = `${metadata.artist} - ${metadata.title}`;
+		
+		console.log(`Metadata: ${chalk.yellow(inspect(compactObject(metadata),<any>{breakLength: Infinity}))}`);
+		
+		// TODO: Replace path & fd with createWriteStream
+		const {path,fd} = await openWritableFile(sanitizeFilename(`${generalTitle}` +'.mp3'));
+		const writeStream = createWriteStream(null,{fd});
+
+		await (new Promise(resolve => {
+			let ended = false;
+			const command = ffmpeg(getYtdlProcess(info))
+				.addOutputOption('-metadata','artist=' + metadata.artist)
+				.addOutputOption('-metadata','title=' + metadata.title)
+				.on('error',(err:Error) => {
+					if(ended){
+						console.log(chalk.yellow('warn'),'the stream errored, but it already ended');
+					}else{
+						ended = true;
+						console.error(chalk.red('err'),err.message);
+						resolve();
+					}
+				})
+				.on('end',() => {
+					ended = true;
+					console.log(`Filename: ${chalk.yellow(path)}`);
+					close(fd);
+					resolve();
+				})
+				.format('mp3')
+				.stream(writeStream,{end: true});
+		}));
+	}
 	
-	const trackDownloadPromises = saveTracks(tracks);
-	trackDownloadPromises.forEach(async trackDownloadPromise => {
-		trackDownloadPromise.then(trackDownload => {
-			console.log(chalk.green('D'),trackDownload.info.title);
-		}).catch(err => {
-			console.error(chalk.red('D'),err.message);
-		});
-	});
-	await Promise.all(trackDownloadPromises);
 
-	console.log('Completed!');
+	else if(input.program===playlistProgram){
+		const url = input.arguments.url;
+		const sync = input.options.sync;
+
+		const playlist = await (ytpl(url,{}).catch((err:Error) => {
+			console.error(chalk.red('err'),'did not found corresponding urls! check the input & internet connection!');
+			throw process.exit(1);
+		}));
+
+		const metadatas = playlist.items.map(item => {
+			const title = item.title;
+			const uploader = item.author.name;
+			const basicMetadata = Object.assign(
+				{
+					artist: uploader,
+					title: 'ID'
+				},
+				guessMetadata(title)
+			);
+			return Object.assign(
+				basicMetadata,
+				{
+					generalTitle: `${basicMetadata.artist} - ${basicMetadata.title}`,
+					url: item.url_simple
+				}
+			);
+		});
+
+		await Promise.all(processChunks(chunkArray(metadatas,numberOfParallelRequests),
+			async metadata => {
+				
+				const openedFile = await (async function(){
+					const basicPath = sanitizeFilename(metadata.generalTitle +'.mp3');
+					const basicFd = await writableFd(basicPath);
+					if(typeof basicFd === 'number'){
+						return{
+							path: basicPath,
+							fd: basicFd
+						};
+					}else if(!sync){
+						return await openWritableFile(basicPath);
+					}
+				})();
+				if(typeof openedFile === 'undefined'){
+					return;
+				}
+				const {path,fd} = openedFile;
+				const writeStream = createWriteStream(null,{fd});
+				
+				await (new Promise(async resolve => {
+					let ended = false;
+					ffmpeg(getYtdlProcess(await getYtdlInfoByURL(metadata.url)))
+						.addOutputOption('-metadata','artist=' + metadata.artist)
+						.addOutputOption('-metadata','title=' + metadata.title)
+						.on('error',(err:Error) => {
+							if(ended){
+								console.log(chalk.yellow('warn'),'the stream errored, but it already ended');
+							}else{
+								ended = true;
+								console.error(chalk.red('err'),err.message);
+								resolve();
+							}
+						})
+						.on('end',() => {
+							ended = true;
+							console.log(`${metadata.generalTitle} → ${chalk.yellow(path)}`);
+							resolve();
+						})
+						.format('mp3')
+						.stream(writeStream);
+				}));
+			}
+		));
+
+		console.log('Completed!');
+	}
 }());

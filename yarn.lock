@@ -334,9 +334,9 @@ growl@1.9.2:
   version "1.9.2"
   resolved "https://registry.yarnpkg.com/growl/-/growl-1.9.2.tgz#0ea7743715db8d8de2c5ede1775e1b45ac85c02f"
 
-guess-metadata@^1.1.3:
-  version "1.1.3"
-  resolved "https://registry.yarnpkg.com/guess-metadata/-/guess-metadata-1.1.3.tgz#7dde5a1050dc65215ec18b195c6f3ed1353ced3d"
+guess-metadata@^1.2.1:
+  version "1.2.1"
+  resolved "https://registry.yarnpkg.com/guess-metadata/-/guess-metadata-1.2.1.tgz#f190a85a871683091cefbdb496a4179b6e95b97a"
   dependencies:
     "@types/node" "^7.0.18"
 
@@ -588,9 +588,9 @@ mkdirp@0.5.1, mkdirp@0.x.x:
   dependencies:
     minimist "0.0.8"
 
-mocha@^3.2.0:
-  version "3.3.0"
-  resolved "https://registry.yarnpkg.com/mocha/-/mocha-3.3.0.tgz#d29b7428d3f52c82e2e65df1ecb7064e1aabbfb5"
+mocha@^3.4.1:
+  version "3.4.1"
+  resolved "https://registry.yarnpkg.com/mocha/-/mocha-3.4.1.tgz#a3802b4aa381934cacb38de70cf771621da8f9af"
   dependencies:
     browser-stdout "1.3.0"
     commander "2.9.0"
@@ -945,9 +945,9 @@ xml-name-validator@^2.0.1:
   version "2.0.1"
   resolved "https://registry.yarnpkg.com/xml-name-validator/-/xml-name-validator-2.0.1.tgz#4d8b8f1eccd3419aa362061becef515e1e559635"
 
-ytdl-core@^0.13.2:
-  version "0.13.2"
-  resolved "https://registry.yarnpkg.com/ytdl-core/-/ytdl-core-0.13.2.tgz#5f9a41a6056b544fd9f74b329ed4f6ddfdd882c5"
+ytdl-core@^0.14.1:
+  version "0.14.1"
+  resolved "https://registry.yarnpkg.com/ytdl-core/-/ytdl-core-0.14.1.tgz#18eb845591a8351c50da3bd767be3a8aa59179ec"
   dependencies:
     html-entities "^1.1.3"
     m3u8stream "^0.1.1"
