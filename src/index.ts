@@ -15,8 +15,7 @@ const trackProgram = createProgram('<url> [track-title]')
 
 const playlistProgram = createProgram('<url>')
 	.description('download whole playlist')
-	.option('-a, --artist <artist-name>','default value for artist')
-	.option('-A, --album <album-name>','treats playlist as album')
+	.option('-a, --album [album-name]','treats playlist as album')
 	.option('-s, --sync','synchronizes playlist; if the file to download is already there, skip it')
 	.option(coverOption)
 
@@ -108,10 +107,12 @@ const processChunks = <T,U>(chunks:T[][],processor:(x:T)=>Promise<U>,after:Promi
 	));
 	return firstChunkXPromises.concat(otherChunkXPromises);
 };
+/*
 const rejectFilteredPromiseAll = async <U>(promises:Promise<U>[]):Promise<U[]> =>
 	(await Promise.all(promises.map((promise):Promise<{value: U}|undefined> =>
 		promise.then(value => ({value})).catch(value => undefined)
 	))).filter(value => value !== undefined).map(value => value.value);
+*/
 
 
 
@@ -219,10 +220,9 @@ const openWritableFile = async (path:string) => {
 };
 
 // TODO: get youtube title earlier ✓
-// TODO: add track-title option
+// TODO: add track-title option ✓
 // TODO: add sync option ✓
 // TODO: add album option
-// TODO: add author option
 
 /*
 Object.keys(chalk.styles).forEach(key => {
@@ -241,16 +241,19 @@ process.exit(0);
 			console.error(chalk.red('err'),'did not found corresponding video! check the input & internet connection!');
 			throw process.exit(1);
 		}));
+		const title = typeof input.arguments['track-title'] === 'string'
+			? input.arguments['track-title']
+			: info.title;
 		const uploader = info.author.name;
 		const metadata = Object.assign(
 			{
 				artist: uploader,
 				title: 'ID'
 			},
-			guessMetadata(info.title)
+			guessMetadata(title)
 		);
 
-		console.log(`${chalk.blue(info.title)} ${chalk.grey(`(${uploader})`)}`);
+		console.log(`${chalk.blue(title)} ${chalk.grey(`(${uploader})`)}`);
 		const generalTitle = `${metadata.artist} - ${metadata.title}`;
 		
 		console.log(`Metadata: ${chalk.yellow(inspect(compactObject(metadata),<any>{breakLength: Infinity}))}`);
@@ -293,24 +296,40 @@ process.exit(0);
 			console.error(chalk.red('err'),'did not found corresponding urls! check the input & internet connection!');
 			throw process.exit(1);
 		}));
-
+		
+		const albumExtensionIterator = (function*(){
+			const albumName = typeof input.options.album === 'string'
+				? input.options.album
+				: input.options.album === true
+					? playlist.title
+					: undefined;
+			console.log(input.options.album);
+			for(let trackNumber = 1;; trackNumber++){
+				yield <{album?:string,track?:string}>(typeof albumName === 'undefined'
+					? {}
+					: {
+						album: albumName,
+						track: trackNumber
+					}
+				);
+			}
+		}());
 		const metadatas = playlist.items.map(item => {
 			const title = item.title;
 			const uploader = item.author.name;
-			const basicMetadata = Object.assign(
+			const id3 = Object.assign(
 				{
 					artist: uploader,
 					title: 'ID'
 				},
+				albumExtensionIterator.next().value,
 				guessMetadata(title)
 			);
-			return Object.assign(
-				basicMetadata,
-				{
-					generalTitle: `${basicMetadata.artist} - ${basicMetadata.title}`,
-					url: item.url_simple
-				}
-			);
+			return {
+				id3: id3,
+				generalTitle: `${id3.artist} - ${id3.title}`,
+				url: item.url_simple
+			}
 		});
 
 		await Promise.all(processChunks(chunkArray(metadatas,numberOfParallelRequests),
@@ -336,9 +355,12 @@ process.exit(0);
 				
 				await (new Promise(async resolve => {
 					let ended = false;
-					ffmpeg(getYtdlProcess(await getYtdlInfoByURL(metadata.url)))
-						.addOutputOption('-metadata','artist=' + metadata.artist)
-						.addOutputOption('-metadata','title=' + metadata.title)
+					let proc = ffmpeg(getYtdlProcess(await getYtdlInfoByURL(metadata.url)))
+					objEntries(metadata.id3).forEach(([tag,value]) => {
+						console.log(tag,value);
+						proc = proc.addOutputOption('-metadata',tag+'=' + value);
+					});
+					proc
 						.on('error',(err:Error) => {
 							if(ended){
 								console.log(chalk.yellow('warn'),'the stream errored, but it already ended');
