@@ -64,7 +64,7 @@ import tmp = require('tmp');
 import request = require('request');
 const mimeTypes:any = require('mime-types');
 import guessMetadata = require('guess-metadata');
-import {createWriteStream,open,close} from 'fs';
+import {createWriteStream,open} from 'fs';
 import {PassThrough} from 'stream';
 import {EventEmitter} from 'events';
 import getImages = require('./get-images');
@@ -279,7 +279,6 @@ process.exit(0);
 				.on('end',() => {
 					ended = true;
 					console.log(`Filename: ${chalk.yellow(path)}`);
-					close(fd);
 					resolve();
 				})
 				.format('mp3')
