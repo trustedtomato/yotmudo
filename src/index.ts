@@ -1,23 +1,19 @@
 /*--- import packages what are needed for the basic input checking ---*/
 const info:any = require('../package.json');
 import {inspect} from 'util';
-import {createOption,createProgram,ParsingErrors,ParsingWarnings} from 'commandy';
+import {createProgram} from 'commandy';
 import * as chalk from 'chalk';
 
 
 
 /*--- define program behavior ---*/
-const coverOption = createOption('--cover','try to find a cover of the song');
-
 const trackProgram = createProgram('<url> [track-title]')
 	.description('download single track')
-	.option(coverOption)
 
 const playlistProgram = createProgram('<url>')
 	.description('download whole playlist')
 	.option('-a, --album [album-name]','treats playlist as album')
 	.option('-s, --sync','synchronizes playlist; if the file to download is already there, skip it')
-	.option(coverOption)
 
 const mainProgram = createProgram()
 	.command('track',trackProgram)
@@ -30,7 +26,7 @@ const input = mainProgram.parse(process.argv.slice(2));
 
 
 /*--- output version ---*/
-if(input.program===mainProgram && input.options.version===true){
+if(input.program===mainProgram && input.options.version.length > 0){
 	console.log('ytmd '+info.version);
 	throw process.exit();
 }
@@ -219,18 +215,6 @@ const openWritableFile = async (path:string) => {
 	}
 };
 
-// TODO: get youtube title earlier ✓
-// TODO: add track-title option ✓
-// TODO: add sync option ✓
-// TODO: add album option
-
-/*
-Object.keys(chalk.styles).forEach(key => {
-	console.log(key + ': ' + (<any>chalk)[key]('Test text'));
-});
-process.exit(0);
-*/
-
 (async function(){
 	const numberOfParallelRequests = 5;
 
@@ -299,10 +283,9 @@ process.exit(0);
 		const albumExtensionIterator = (function*(){
 			const albumName = typeof input.options.album === 'string'
 				? input.options.album
-				: input.options.album === true
+				: input.options.album[0] === true
 					? playlist.title
 					: undefined;
-			console.log(input.options.album);
 			for(let trackNumber = 1;; trackNumber++){
 				yield <{album?:string,track?:string}>(typeof albumName === 'undefined'
 					? {}
@@ -356,7 +339,6 @@ process.exit(0);
 					let ended = false;
 					let proc = ffmpeg(getYtdlProcess(await getYtdlInfoByURL(metadata.url)))
 					objEntries(metadata.id3).forEach(([tag,value]) => {
-						console.log(tag,value);
 						proc = proc.addOutputOption('-metadata',tag+'=' + value);
 					});
 					proc
