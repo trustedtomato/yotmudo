@@ -1,6 +1,5 @@
 const request:any = require('request');
 const Jsdom:any = require('jsdom').JSDOM;
-import querystring = require('querystring');
 
 export = (q:string):Promise<string[]> => new Promise((resolve,reject) => {
 	const url = 'https://www.google.com/search?source=lnms&tbm=isch&sa=X&q='+encodeURIComponent(q);

@@ -1,8 +1,7 @@
 const request:any = require('request');
 const Jsdom:any = require('jsdom').JSDOM;
-import querystring = require('querystring');
 
-export = (q:string):Promise<string[]> => new Promise((resolve,reject) => {
+export = (q:string):Promise<string> => new Promise((resolve,reject) => {
 	const url = 'https://en.wikipedia.org/w/index.php?search='+encodeURIComponent(q);
 	request({
 		url: url,
@@ -12,7 +11,7 @@ export = (q:string):Promise<string[]> => new Promise((resolve,reject) => {
 	},(err:Error,response:any,body:string) => {
 		const dom = new Jsdom(body);
 		const document = dom.window.document;
-		const title = document.getElementById('firstHeading').innerText;
+		const title = document.getElementById('firstHeading').textContent;
 		resolve(title);
 	});
 });

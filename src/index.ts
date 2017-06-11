@@ -3,6 +3,7 @@ const info:any = require('../package.json');
 import {inspect} from 'util';
 import {createProgram} from 'commandy';
 import * as chalk from 'chalk';
+import getWikipediaTitle = require('./get-wikipedia-title');
 
 
 
@@ -56,20 +57,14 @@ import ffmpeg = require('fluent-ffmpeg');
 import ytdl = require('ytdl-core');
 import ytpl = require('ytpl');
 import sanitizeFilename = require('sanitize-filename');
-import tmp = require('tmp');
-import request = require('request');
-const mimeTypes:any = require('mime-types');
 import guessMetadata = require('guess-metadata');
 import {createWriteStream,open} from 'fs';
-import {PassThrough} from 'stream';
-import {EventEmitter} from 'events';
-import getImages = require('./get-images');
 
 const VIDEO_URL = 'https://www.youtube.com/watch?v=';
 
 
 const chunkArray = <T>(arr:T[],chunkLength:number):T[][] => {
-	let i,j,temparray;
+	let i,j;
 	const chunks = [];
 	for(i = 0, j = arr.length; i < j; i += chunkLength) {
 		chunks.push(arr.slice(i,i+chunkLength));
@@ -103,12 +98,6 @@ const processChunks = <T,U>(chunks:T[][],processor:(x:T)=>Promise<U>,after:Promi
 	));
 	return firstChunkXPromises.concat(otherChunkXPromises);
 };
-/*
-const rejectFilteredPromiseAll = async <U>(promises:Promise<U>[]):Promise<U[]> =>
-	(await Promise.all(promises.map((promise):Promise<{value: U}|undefined> =>
-		promise.then(value => ({value})).catch(value => undefined)
-	))).filter(value => value !== undefined).map(value => value.value);
-*/
 
 
 
@@ -118,7 +107,7 @@ const correctYoutubeUrl = (url:string) =>
 		: url;
 const getYtdlInfoByURL = async (url:string,retries:number = 0,retryDelay:number = 1000):Promise<ytdl.videoInfo> => {
 	return await ytdl.getInfo(url).catch(
-		async (err:Error) => {
+		async () => {
 			if(retries<=0){
 				throw new Error('Cannot get info!');
 			}
@@ -214,6 +203,18 @@ const openWritableFile = async (path:string) => {
 		return await openWritableFileWithNumberedFilename(path);
 	}
 };
+const correctMetadata = async <T extends {[key:string]:string}>(metadata:T):Promise<T> => {
+	const correctedMetadatas:{[key:string]:string} = {};
+
+	if(metadata.artist !== 'undefined'){
+		const wikiArtist = await getWikipediaTitle(metadata.artist);
+		if(wikiArtist.toLowerCase()===metadata.artist.toLowerCase()){
+			correctedMetadatas.artist = wikiArtist;
+		}
+	}
+
+	return Object.assign({},metadata,correctedMetadatas);
+};
 
 (async function(){
 	const numberOfParallelRequests = 5;
@@ -221,7 +222,7 @@ const openWritableFile = async (path:string) => {
 
 	if(input.program===trackProgram){
 		const url = correctYoutubeUrl(input.arguments.url);
-		const info = await (getYtdlInfoByURL(url).catch(err => {
+		const info = await (getYtdlInfoByURL(url).catch(() => {
 			console.error(chalk.red('err'),'did not found corresponding video! check the input & internet connection!');
 			throw process.exit(1);
 		}));
@@ -229,13 +230,14 @@ const openWritableFile = async (path:string) => {
 			? input.arguments['track-title']
 			: info.title;
 		const uploader = info.author.name;
-		const metadata = Object.assign(
+		const metadata = await correctMetadata(Object.assign(
 			{
 				artist: uploader,
 				title: 'ID'
 			},
 			guessMetadata(title)
-		);
+		));
+
 
 		console.log(`${chalk.blue(title)} ${chalk.grey(`(${uploader})`)}`);
 		const generalTitle = `${metadata.artist} - ${metadata.title}`;
@@ -248,7 +250,7 @@ const openWritableFile = async (path:string) => {
 
 		await (new Promise(resolve => {
 			let ended = false;
-			const command = ffmpeg(getYtdlProcess(info))
+			ffmpeg(getYtdlProcess(info))
 				.addOutputOption('-metadata','artist=' + metadata.artist)
 				.addOutputOption('-metadata','title=' + metadata.title)
 				.on('error',(err:Error) => {
@@ -275,7 +277,7 @@ const openWritableFile = async (path:string) => {
 		const url = input.arguments.url;
 		const sync = input.options.sync;
 
-		const playlist = await (ytpl(url,{}).catch((err:Error) => {
+		const playlist = await (ytpl(url,{}).catch(() => {
 			console.error(chalk.red('err'),'did not found corresponding urls! check the input & internet connection!');
 			throw process.exit(1);
 		}));
@@ -296,23 +298,23 @@ const openWritableFile = async (path:string) => {
 				);
 			}
 		}());
-		const metadatas = playlist.items.map(item => {
+		const metadatas = await Promise.all(playlist.items.map(async item => {
 			const title = item.title;
 			const uploader = item.author.name;
-			const id3 = Object.assign(
+			const id3 = await correctMetadata(Object.assign(
 				{
 					artist: uploader,
 					title: 'ID'
 				},
 				albumExtensionIterator.next().value,
 				guessMetadata(title)
-			);
+			));
 			return {
 				id3: id3,
 				generalTitle: `${id3.artist} - ${id3.title}`,
 				url: item.url_simple
 			}
-		});
+		}));
 
 		await Promise.all(processChunks(chunkArray(metadatas,numberOfParallelRequests),
 			async metadata => {
