@@ -281,8 +281,8 @@ const openWritableFile = async (path:string) => {
 		}));
 		
 		const albumExtensionIterator = (function*(){
-			const albumName = typeof input.options.album === 'string'
-				? input.options.album
+			const albumName = typeof input.options.album[0] === 'string'
+				? input.options.album[0]
 				: input.options.album[0] === true
 					? playlist.title
 					: undefined;
