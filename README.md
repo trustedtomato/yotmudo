@@ -6,5 +6,6 @@ Download music from YouTube through the command line
 * Able to download playlists
 * Guesses metadata by the title
 
-## Install
-**Coming soon...** 
+## Getting started
+1. Install it via npm: ```npm install yotmudo```
+2. Run ```yotmudo --help``` to see its usage
