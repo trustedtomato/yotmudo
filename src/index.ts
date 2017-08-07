@@ -12,14 +12,14 @@ const error = (text:string) => {
 const helpMessage =
 `
 Usage:
-    ytmd track <url>              : Download a single track. The <url> can be the full URL of just the video ID.
-    ytmd playlist <url> [options] : Download a whole playist. The <url> can be any type of URL which points to the playlist or just the playlist ID.
+    yotmudo track <url>              : Download a single track. The <url> can be the full URL of just the video ID.
+    yotmudo playlist <url> [options] : Download a whole playist. The <url> can be any type of URL which points to the playlist or just the playlist ID.
                                     --album[=albumname]   Set the album tag to [albumname]. [albumname] defaults to the playlist name. Alias: -a.
                                     --sync                Do not download track if there is an .mp3 with the same name. Alias: -s.
                                     --quick               Use the offline algorithm	to parse the tags. Try to avoid this option. Alias: -q.
                                     --verbose             Output verbose information about what's happening. Alias: -v.
-ytmd --version : Output version info
-ytmd --help    : Output help
+yotmudo --version : Output version info
+yotmudo --help    : Output help
 `;
 
 
