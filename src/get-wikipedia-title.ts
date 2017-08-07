@@ -1,6 +1,8 @@
 const request:any = require('request');
 const Jsdom:any = require('jsdom').JSDOM;
 
+// Fetch till <title>
+
 export = (q:string):Promise<string> => new Promise((resolve,reject) => {
 	const url = 'https://en.wikipedia.org/w/index.php?search='+encodeURIComponent(q);
 	request({
@@ -11,7 +13,11 @@ export = (q:string):Promise<string> => new Promise((resolve,reject) => {
 	},(err:Error,response:any,body:string) => {
 		const dom = new Jsdom(body);
 		const document = dom.window.document;
-		const title = document.getElementById('firstHeading').textContent;
-		resolve(title);
+		const firstHeading = document.getElementById('firstHeading');
+		if(firstHeading===null){
+			resolve('');
+		}else{
+			resolve(firstHeading.textContent);
+		}
 	});
 });
