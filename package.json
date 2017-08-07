@@ -1,6 +1,6 @@
 {
   "name": "yotmudo",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "YouTube downloader",
   "license": "MIT",
   "scripts": {
