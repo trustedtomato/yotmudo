@@ -8,4 +8,4 @@ Download music from YouTube through the command line
 
 ## Getting started
 1. Install it via npm: ```npm install yotmudo```
-2. Run ```yotmudo --help``` to see its usage
+2. Run ```ytdl --help``` to see its usage
