@@ -1,26 +1,22 @@
 /*--- import packages what are needed for the basic input checking ---*/
 import {Program} from 'commandy';
-import * as chalk from 'chalk';
+import chalk from 'chalk';
 
 const error = (text:string) => {
 	process.stderr.write(chalk.red('err') + ' ' + text + '\n');
 };
 
-
-
 /*--- define program behavior ---*/
-const helpMessage =
-`
-Usage:
-    yotmudo track <url>              : Download a single track. The <url> can be the full URL of just the video ID.
-    yotmudo playlist <url> [options] : Download a whole playist. The <url> can be any type of URL which points to the playlist or just the playlist ID.
-                                    --album[=albumname]   Set the album tag to [albumname]. [albumname] defaults to the playlist name. Alias: -a.
-                                    --sync                Do not download track if there is an .mp3 with the same name. Alias: -s.
-                                    --quick               Use the offline algorithm	to parse the tags. Try to avoid this option. Alias: -q.
-                                    --verbose             Output verbose information about what's happening. Alias: -v.
-yotmudo --version : Output version info
-yotmudo --help    : Output help
-`;
+const helpMessage = `
+ytdl track <url> : Download single song
+ytdl playlist <url> [options] : Download whole playlist
+--album[=albumname] : Set the album tag to [albumname]. [albumname] defaults to the playlist name. Alias: -a.
+--sync : Do not download track if there is an .mp3 with the same name. Alias: -s.
+--quick : Use the offline algorithm to parse the tags. Try to avoid this option. Alias: -q.
+--verbose : Output verbose information about what's happening. Alias: -v.
+ytdl --version : Output version info
+ytdl --help : Output help
+`.trim();
 
 
 const trackProgram = new Program();
@@ -64,32 +60,26 @@ const input = mainProgram.parse(process.argv.slice(2));
 
 
 
-	console.log();
 	/*--- error if it haven't invoked a right program ---*/
 	if(input.program!==trackProgram && input.program!==playlistProgram){
 		error('invalid command! see: ytmd --help');
-		return console.log();
+		return;
 	}
 
 
 
 	/*--- else it's good; do the task ---*/
-	process.stdout.write('Importing modules...');
+	console.log('Importing modules...');
 	const ffmpeg = await import('fluent-ffmpeg');
 	const ytdl = await import('ytdl-core');
 	const ytpl = await import('ytpl');
 	const sanitizeFilename = await import('sanitize-filename');
 	const offlineGuessMetadata = await import('guess-metadata');
-	const {createWriteStream,open} = await import('fs');
+	const {default: request} = await import('./request');
+	const {createWriteStream, open, unlinkSync} = await import('fs');
 	const {inspect} = await import('util');
-	const readline = await import('readline');
-	readline.clearLine(process.stdout, 0);
-	readline.cursorTo(process.stdout, 0);
-	process.stdout.write('Defining functions...');
-
+	
 	const VIDEO_URL = 'https://www.youtube.com/watch?v=';
-
-
 
 	/*--- define general purpose functions ---*/
 	const delay = (delay:number) => new Promise(resolve => 
@@ -189,11 +179,15 @@ const input = mainProgram.parse(process.argv.slice(2));
 
 		return metadata;
 	};
-	const getFfmpegProcess = (info:any/* ytdl.videoInfo */,id3:{[key:string]:string}) => {
-		let proc = ffmpeg(getYtdlProcess(info));
-		objEntries(id3).forEach(([tag,value]) => {
-			proc = proc.addOutputOption('-metadata',tag+'=' + value);
+	const getFfmpegProcess = (info:any/* ytdl.videoInfo */, id3:{[key:string]:string}) => {
+		const ytdlProc = getYtdlProcess(info);
+		let proc = ffmpeg(ytdlProc);
+		objEntries(id3).forEach(([id,value]) => {
+			proc = proc.addOutputOption('-metadata',id+'=' + value);
 		});
+		ytdlProc.on('progress', (...args) => {
+			proc.emit('ytdl-progress', ...args);
+		})
 		return proc;
 	};
 	const albumExtensionGenerator = function*(albumName:string|undefined){
@@ -207,54 +201,52 @@ const input = mainProgram.parse(process.argv.slice(2));
 			);
 		}
 	};
-	readline.clearLine(process.stdout, 0);
-	readline.cursorTo(process.stdout, 0);
 
 
 
 	if(input.program===trackProgram){
 		const url = completeYoutubeUrl(input.args[0]);
 
-		process.stdout.write('Fetching information...');
+		console.log('Fetching information...');
 		const info = await (getYtdlInfoByURL(url).catch(() => {
 			error('did not found corresponding video! check the input & internet connection!');
 		}));
-		if(typeof info === 'undefined') return console.log();
-		readline.clearLine(process.stdout, 0);
-		readline.cursorTo(process.stdout, 0);
+		if(typeof info === 'undefined') return;
 
 		const title = info.title;
 		const uploader = info.author.name;
-
-		process.stdout.write('Guessing metadata...');
+		console.log(`${chalk.blue(title)} ${chalk.grey(`(${uploader})`)}`);
+		const filename = title + '.mp3';
+		
+		process.stdout.write('Metadata: ');
 		const metadata = Object.assign({
 			artist: uploader,
 			title: 'ID'
 		}, await guessMetadata(title));
-		readline.clearLine(process.stdout, 0);
-		readline.cursorTo(process.stdout, 0);
+		process.stdout.write(chalk.yellow(inspect(compactObject(metadata),<any>{breakLength: Infinity})) + '\n');
 
-		console.log(`${chalk.blue(title)} ${chalk.grey(`(${uploader})`)}`);
-		console.log(`Metadata: ${chalk.yellow(inspect(compactObject(metadata),<any>{breakLength: Infinity}))}`);
-
-		const generalTitle = `${metadata.artist} - ${metadata.title}`;
-
-		const {path,fd} = await openWritableFile(sanitizeFilename(`${generalTitle}` +'.mp3'));
+		const {path,fd} = await openWritableFile(sanitizeFilename(filename));
+		console.log(`Filename: ${chalk.yellow(path)}`);
 		const writeStream = createWriteStream(null, {fd});
 
-		process.stdout.write('Downloading...');
+		let percent = 0;
+		process.stdout.write('0%');
 		await (new Promise(resolve => {
-			getFfmpegProcess(info,metadata)
+			getFfmpegProcess(info, metadata)
+				.on('ytdl-progress', (_, totalDownloaded, totalDownload) => {
+					const newPercent = Math.floor(totalDownloaded / totalDownload * 100);
+					if(percent !== newPercent){
+						percent = newPercent;
+						process.stdout.write('\r' + newPercent + '%');
+					}
+				})
 				.on('error',(err:Error) => {
-					readline.clearLine(process.stdout, 0);
-					readline.cursorTo(process.stdout, 0);
+					process.stdout.write('\n');
 					console.error(chalk.red('err'),err.message);
 					resolve();
 				})
 				.on('end',() => {
-					readline.clearLine(process.stdout, 0);
-					readline.cursorTo(process.stdout, 0);
-					console.log(`Filename: ${chalk.yellow(path)}`);
+					process.stdout.write('\rDownloaded!\n');
 					resolve();
 				})
 				.format('mp3')
@@ -269,13 +261,11 @@ const input = mainProgram.parse(process.argv.slice(2));
 		const quick = input.options.quick.length > 0;
 		const givenAlbumName = input.options.album[0];
 
-		process.stdout.write('Fetching information...');
+		console.log('Fetching information...');
 		const playlist = await (ytpl(url).catch(() => {
 			error('did not found corresponding urls! check the input & internet connection!');
 		}));
-		if(typeof playlist === 'undefined') return console.log();
-		readline.clearLine(process.stdout, 0);
-		readline.cursorTo(process.stdout, 0);
+		if(typeof playlist === 'undefined') return;
 
 		const albumName = typeof givenAlbumName === 'string'
 			? givenAlbumName
@@ -284,23 +274,22 @@ const input = mainProgram.parse(process.argv.slice(2));
 				: undefined;
 		const albumExtensionIterator = albumExtensionGenerator(albumName);
 
-		await Promise.all(processConsecutively(playlist.items,
-			async ({title: originalTitle, author: {name: uploader}, url_simple: url}) => {
-				const identifier = originalTitle;
+		await processConsecutively(playlist.items,
+			async ({title, author: {name: uploader}, url_simple: url, id: ytId}) => {
+				const identifier = title;
 				const filename = identifier + '.mp3';
+				console.log(`${chalk.blue(title)} ${chalk.grey(`(${uploader})`)}`);
 
-				process.stdout.write('Guessing metadata...');
+				process.stdout.write('Metadata: ');
 				const metadata = Object.assign(
 					{
 						artist: uploader,
 						title: 'ID'
 					},
 					albumExtensionIterator.next().value,
-					quick ? offlineGuessMetadata(originalTitle) : await guessMetadata(originalTitle)
+					quick ? offlineGuessMetadata(title) : await guessMetadata(title)
 				);
-				readline.clearLine(process.stdout, 0);
-				readline.cursorTo(process.stdout, 0);
-
+				process.stdout.write(chalk.yellow(inspect(compactObject(metadata),<any>{breakLength: Infinity})) + '\n');
 				
 				const openedFile = await (async function(){
 					const basicPath = sanitizeFilename(filename);
@@ -318,35 +307,40 @@ const input = mainProgram.parse(process.argv.slice(2));
 					return;
 				}
 				const {path,fd} = openedFile;
+				console.log(`Filename: ${chalk.yellow(path)}`);
 				const writeStream = createWriteStream(null,{fd});
 
 				
-				process.stdout.write('Downloading...');
+				let percent = 0;
+				process.stdout.write('0%');
 				return await (new Promise(async resolve => {
 					getYtdlInfoByURL(url).then(info => {
 						getFfmpegProcess(info,metadata)
+							.on('ytdl-progress', (_, totalDownloaded, totalDownload) => {
+								const newPercent = Math.floor(totalDownloaded / totalDownload * 100);
+								if(percent !== newPercent){
+									percent = newPercent;
+									process.stdout.write('\r' + newPercent + '%');
+								}
+							})
 							.on('error',(err:Error) => {
-								readline.clearLine(process.stdout, 0);
-								readline.cursorTo(process.stdout, 0);
-								console.error(chalk.red('err'),chalk.grey(`(${identifier})`),err.message);
+								process.stdout.write('\n');
+								unlinkSync(path);
+								console.error(chalk.red('err'),chalk.grey(`(${ytId})`),err.message);
 								resolve();
 							})
 							.on('end',() => {
-								readline.clearLine(process.stdout, 0);
-								readline.cursorTo(process.stdout, 0);
-								console.log(`${identifier} → ${chalk.yellow(path)}`);
+								process.stdout.write('\rDownloaded!\n');
 								resolve();
 							})
 							.format('mp3')
-							.stream(writeStream);
+							.stream(writeStream,{end: true});
 					}).catch(err => {
-						console.error(chalk.red('err'),chalk.grey(`(${identifier})`),err.message);
+						console.error(chalk.red('err'),chalk.grey(`(${ytId})`),err.message);
 						resolve();
 					});
 				}));
 			}
-		));
+		);
 	}
-
-	console.log();
 }());
