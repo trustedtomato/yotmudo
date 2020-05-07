@@ -6,7 +6,9 @@
   "scripts": {
     "watch": "tsc -w",
     "build": "tsc",
-    "postversion": "git push && git push --tags && npm publish"
+    "postversion": "git push && git push --tags && npm publish",
+    "snyk-protect": "snyk protect",
+    "prepare": "npm run snyk-protect"
   },
   "engines": {
     "node": ">=6.10.1"
@@ -37,8 +39,10 @@
     "tmp": "0.0.33",
     "typescript": "^2.5.3",
     "ytdl-core": "^0.18.1",
-    "ytpl": "^0.1.9"
+    "ytpl": "^0.1.9",
+    "snyk": "^1.319.1"
   },
   "repository": "git@github.com:trustedtomato/node-youtube-music-downloader.git",
-  "author": "Halasi Tamás <trusted.tomato@gmail.com>"
+  "author": "Halasi Tamás <trusted.tomato@gmail.com>",
+  "snyk": true
 }
